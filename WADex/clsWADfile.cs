@@ -5,9 +5,53 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Collections.Generic;
 using System.Security.Cryptography;
+using musConvert;
 
 namespace WADex
 {
+    /// <summary>
+    /// Possible file types to detect
+    /// </summary>
+    public enum FType
+    {
+        /// <summary>
+        /// Midi file
+        /// </summary>
+        MID,
+        /// <summary>
+        /// DOOM Mus file
+        /// </summary>
+        MUS,
+        /// <summary>
+        /// RIFF WAV file
+        /// </summary>
+        WAV,
+        /// <summary>
+        /// Impulse tracker file
+        /// </summary>
+        IT,
+        /// <summary>
+        /// Extended module file
+        /// </summary>
+        XM,
+        /// <summary>
+        /// MP3 file
+        /// </summary>
+        MP3,
+        /// <summary>
+        /// RAW audio format
+        /// </summary>
+        RAWAUDIO,
+        /// <summary>
+        /// unknown file (probably doom image)
+        /// </summary>
+        UNKNOWN,
+        /// <summary>
+        /// Virtual entry
+        /// </summary>
+        VIRTUAL
+    }
+
     /// <summary>
     /// Possible WAD types
     /// </summary>
@@ -127,10 +171,15 @@ namespace WADex
         /// Exports all WAD file contents to the specified directory
         /// </summary>
         /// <param name="Directory">(preferable empty) Directory</param>
-        public void Export(string Directory)
+        public void Export(string Folder)
         {
+            string MediaDir = Path.Combine(Folder, "MEDIA");
+            if (!Directory.Exists(MediaDir))
+            {
+                Directory.CreateDirectory(MediaDir);
+            }
             Dictionary<string, string> Hashes = new Dictionary<string, string>();
-            using (StreamWriter SW = File.CreateText(Path.Combine(Directory,"!INDEX.TXT")))
+            using (StreamWriter SW = File.CreateText(Path.Combine(Folder,"!INDEX.TXT")))
             {
                 SW.WriteLine("{0}", Type);
                 foreach (WADentry e in Entries)
@@ -140,19 +189,23 @@ namespace WADex
                         string fName = e.SafeName;
                         if (!Hashes.ContainsKey(e.Hash))
                         {
-                            if (File.Exists(Path.Combine(Directory, fName)))
+                            if (File.Exists(Path.Combine(Folder, fName)))
                             {
+                                Program.Log(ConsoleColor.Yellow, "finding alternate name...");
                                 int index = 0;
-                                while (File.Exists(Path.Combine(Directory, string.Format("{0}_{1}", fName, index))))
+                                while (File.Exists(Path.Combine(Folder, string.Format("{0}_{1}", fName, index))))
                                 {
-                                    Program.Log(ConsoleColor.Yellow, "finding alternate name...");
                                     index++;
                                 }
                                 fName = string.Format("{0}_{1}", fName, index);
                             }
-                            Program.Log(ConsoleColor.Green, "Creating {0}...", fName);
-                            File.WriteAllBytes(Path.Combine(Directory, fName), e.Data);
+                            Program.Log(ConsoleColor.Green, "Creating {0}... Type: {1}", fName, e.DataType);
+                            File.WriteAllBytes(Path.Combine(Folder, fName), e.Data);
                             Hashes.Add(e.Hash, fName);
+                            if (e.DataType != FType.UNKNOWN)
+                            {
+                                Convert(e.Data, Path.Combine(MediaDir, fName));
+                            }
                         }
                         else
                         {
@@ -450,6 +503,149 @@ namespace WADex
                 retValue.Append(b.ToString("X2"));
             }
             return retValue.ToString();
+        }
+
+        /// <summary>
+        /// Converts data to its unencoded format
+        /// </summary>
+        /// <param name="From">Data</param>
+        /// <param name="To">destination file (extension added automatically)</param>
+        /// <returns>true, if successful</returns>
+        public static bool Convert(byte[] From, string To)
+        {
+            FType FileType = WADfile.GetType(From);
+            if (File.Exists(To))
+            {
+                File.Delete(To);
+            }
+            switch (FileType)
+            {
+                //just copy the file for these
+                case FType.XM:
+                case FType.IT:
+                case FType.MID:
+                case FType.WAV:
+                case FType.MP3:
+                    Program.Log(ConsoleColor.Green, "Copying DATA -> {0}", FileType);
+                    File.WriteAllBytes(To + "." + FileType.ToString(), From);
+                    break;
+                case FType.MUS:
+                    Program.Log(ConsoleColor.Yellow, "Converting MUS -> MID");
+                    using (MemoryStream IN = new MemoryStream(From))
+                    {
+                        using (FileStream OUT = File.Create(To+".MID"))
+                        {
+                            MUS2MID.Convert(IN, OUT);
+                        }
+                    }
+                    break;
+                case FType.RAWAUDIO:
+                    SaveAudio(From, To + ".WAV");
+                    break;
+                case FType.VIRTUAL:
+                    Program.Log(ConsoleColor.Yellow, "Not converting virtual entry");
+                    return false;
+                default:
+                    try
+                    {
+                        ToImage(From, To + ".PNG");
+                    }
+                    catch
+                    {
+                        return false;
+                    }
+                    break;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Saves an Audio stream into a wav file
+        /// </summary>
+        /// <param name="From">Data</param>
+        /// <param name="To">destination file</param>
+        /// <returns>true, if successful</returns>
+        private static bool SaveAudio(byte[] From, string To)
+        {
+            ushort Header, Samplerate, NumSamples, Zero;
+            if (From.Length > 8)
+            {
+                Header = BitConverter.ToUInt16(From, 0);
+                Samplerate = BitConverter.ToUInt16(From, 2);
+                NumSamples = BitConverter.ToUInt16(From, 4);
+                Zero = BitConverter.ToUInt16(From, 6);
+
+                if (Zero == 0 && Header == 3 && NumSamples == From.Length - 8)
+                {
+                    using (FileStream FS = File.OpenWrite(To))
+                    {
+                        FS.Write(wavCap.Header.WaveHeader(NumSamples), 0, 44);
+                        FS.Write(From, 0, From.Length);
+                    }
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Gets the suggested data type
+        /// </summary>
+        /// <param name="Data">Data to check</param>
+        /// <returns>data type</returns>
+        public static FType GetType(byte[] Data)
+        {
+            if (Data == null || Data.Length == 0)
+            {
+                return FType.VIRTUAL;
+            }
+            if (Cmp(Data, Encoding.UTF8.GetBytes("Extended Module")))
+            {
+                return FType.XM;
+            }
+            if (Cmp(Data, Encoding.UTF8.GetBytes("IMPM")))
+            {
+                return FType.IT;
+            }
+            if (Cmp(Data, Encoding.UTF8.GetBytes("RIFF")))
+            {
+                return FType.WAV;
+            }
+            if (Cmp(Data, Encoding.UTF8.GetBytes("ID3")))
+            {
+                return FType.MP3;
+            }
+            if (Cmp(Data, Encoding.UTF8.GetBytes("MThd")))
+            {
+                return FType.MID;
+            }
+            if (Cmp(Data, Encoding.UTF8.GetBytes("MUS")))
+            {
+                return FType.MUS;
+            }
+            if (Cmp(Data, new byte[] { 0x03, 0x00 }))
+            {
+                return FType.RAWAUDIO;
+            }
+            return FType.UNKNOWN;
+        }
+
+        /// <summary>
+        /// compares two byte arrays, B must be in A
+        /// </summary>
+        /// <param name="A">Main Array</param>
+        /// <param name="B">Array to search for</param>
+        /// <returns>true, if A begins with B</returns>
+        private static bool Cmp(byte[] A, byte[] B)
+        {
+            for (int i = 0; i < A.Length && i < B.Length; i++)
+            {
+                if (A[i] != B[i])
+                {
+                    return false;
+                }
+            }
+            return true;
         }
     }
 }

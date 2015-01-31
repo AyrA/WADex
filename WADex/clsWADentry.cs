@@ -64,6 +64,16 @@
         /// </summary>
         public string Hash
         { get; private set; }
+        /// <summary>
+        /// Gets the suggested type of the data
+        /// </summary>
+        public FType DataType
+        {
+            get
+            {
+                return WADfile.GetType(Data);
+            }
+        }
 
         /// <summary>
         /// Creates a WAD entry

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using System.IO;
+using musConvert;
 
 namespace WADex
 {
@@ -35,15 +36,20 @@ namespace WADex
                             return;
                         }
                         Console.WriteLine(WF.Type.ToString());
+                        Console.WriteLine("NAME;FILENAME;OFFSET;LENGTH;TYPE;HASH");
                         foreach (WADentry e in WF.Entries)
                         {
-                            Console.WriteLine("{0};{1};{2};{3};{4}", e.Name, e.SafeName, e.Offset, e.Length, e.Hash);
+                            Console.WriteLine("{0};{1};{2};{3};{4};{5}", e.Name, e.SafeName, e.Offset, e.Length, e.DataType, e.Hash);
                         }
                     }
                     else
                     {
                         Log(ConsoleColor.Red, "File not found");
                     }
+                }
+                else if (args[0].ToUpper() == "C")
+                {
+                    Convert(args[1]);
                 }
                 else
                 {
@@ -96,11 +102,71 @@ namespace WADex
                             Log(ConsoleColor.Red, "Directory not found: {0}", args[2]);
                         }
                         break;
+                    case "C":
+                        Convert(args[1], args[2]);
+                        break;
                     default:
                         Log(ConsoleColor.Red, "Invalid Operation: {0}", args[0]);
                         break;
                 }
             }
+        }
+
+        private static void Convert(string From, string To)
+        {
+            WADfile.Convert(File.ReadAllBytes(From),To);
+        }
+
+        private static void Convert(string From)
+        {
+            int last = From.LastIndexOfAny(new char[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar });
+            int dot = From.LastIndexOf('.');
+            string To = From;
+            FType FileType = WADfile.GetType(File.ReadAllBytes(From));
+            //check if file has extension, if so, cut off
+            if (dot > last)
+            {
+                To = From.Substring(0, dot);
+            }
+            if (FileType == FType.MUS)
+            {
+                To += ".MID";
+            }
+            else if (FileType == FType.RAWAUDIO)
+            {
+                To += ".WAV";
+            }
+
+            else
+            {
+                To += "." + FileType.ToString();
+            }
+            //very simple check, if the destination is the same as the source, ignoring character case
+            if (File.Exists(To) && WADfile.getHash(File.ReadAllBytes(From)) == WADfile.getHash(File.ReadAllBytes(To)))
+            {
+                Log(ConsoleColor.Yellow, "File would be identical after generating destination name. Not converting");
+            }
+            else
+            {
+                Convert(From, To);
+            }
+        }
+
+        private static string ToHex(byte[] Head)
+        {
+            StringBuilder SB = new StringBuilder(Head.Length);
+            foreach (byte b in Head)
+            {
+                if (b < ' ' || b > 126)
+                {
+                    SB.Append('.');
+                }
+                else
+                {
+                    SB.Append((char)b);
+                }
+            }
+            return SB.ToString();
         }
 
         /// <summary>
@@ -123,7 +189,7 @@ The directory needs to have a valid '!INDEX.TXT' file present.
 If the WAD file is present, it is overwritten
 
 The importer will do the folowing for you:
-- recalculating SHA hashes (the index file is not updated)
+- recalculating SHA hashes (the index file hashes are not modified)
 - importing all referenced files into the WAD in the order you have specified
   them in the index file.
 - checking for identical data to save space.
@@ -138,7 +204,7 @@ E operation
 
 The E operation extracts all items into the supplied directory
 A file named !INDEX.TXT is created, that is required for the
-A operation. The file can be edited if you make changes to the
+'A' operation. The file can be edited if you make changes to the
 extracted resources.
 
 if the directory already contains files, they are overwritten
@@ -165,11 +231,51 @@ You can edit resources and the file freely.
 - You can change between IWAD and PWAD
 
 If you add resources, add them in the correct position in the index file.
-If you add a 'Sprite'-type resource, then add it between the matching virtual
-entries in the index file.
+Example: If you add a 'Sprite'-type resource, then add it between the
+matching virtual entries in the index file.
 
 See the 'A' operation help for more details regarding importing after edit.
-");
+
+Mass-Conversion by extraction
+-----------------------------
+A subdirectory 'MEDIA' is created, where content, with a known
+format is automatically placed, except doom image format as it
+lacks a header. See the 'C' operation help for known types.
+Adding, editing or removing entries in this folder has no effect
+on the 'A' operation. A file in this directory are also present
+in its WAD format in the parent directory.
+You are free to delete the directory at any time.");
+                    break;
+                case 'C':
+                    Console.WriteLine(@"WAD extractor and assembler by AyrA
+
+C operation
+-----------
+
+The C operation converts data from the wad file to a common format.
+This conversion is unidirectional
+
+Instead of supplying a wad file and a directory as arguments,
+supply the file name and the output file as arguments.
+
+The output file is optional. If not specified. The original name is
+used and the matching extension is appended to the name.
+WAD Images have no header, a file is assumed to be an image, if it does
+not start with any known header.
+
+Known formats:
+
+Converted:
+Doom Audio -> WAV (11 KHz)
+Doom MUS   -> MID
+Doom image -> PNG
+
+Copied 'as-is', if header found:
+MP3,WAV,IT,XM,MID
+
+To convert multiple entries, see the 'E' argument help.
+The 'E' operation will convert all data, if it finds a matching header.
+It is a great way to extract all music files from a WAD at once.");
                     break;
                 case 'I':
                     Console.WriteLine(@"WAD extractor and assembler by AyrA
@@ -179,15 +285,17 @@ I operation
 
 The I operation displays all items in the WAD dictionary
 This CSV format is used:
-<NAME>;<FILENAME>;<OFFSET>;<SIZE>;<HASH>
+<NAME>;<FILENAME>;<OFFSET>;<SIZE>;<TYPE>;<HASH>
 
 NAME      - Name of the entry in the WAD file
 FILENAME  - Filename that would be used for extraction
 OFFSET    - Offset in bytes of the data in the WAD
 SIZE      - Size of the data
+TYPE      - Assumed data type from header
 HASH      - SHA1 hash of data
 
-The first line just contains the string IWAD or PWAD");
+The first line just contains the string IWAD or PWAD,
+the second line contains the column headers");
                     break;
                 default:
                     Console.WriteLine(@"WAD extractor and assembler by AyrA
@@ -198,11 +306,11 @@ WADfile     required WADfile to operate on
 operation   Action to perform
             E - Extract all resources to 'Directory' path
             A - Assemble WAD from 'Directory' path
+            C - Convert a WAD image to png (or mus to mid)
             I - List resources ('Directory' not to be supplied)
 Directory   Directory for 'A' and 'E' operation
 
-Specify only the operation parameter to get specific help
-");
+Specify only the operation parameter to get specific help");
                     break;
             }
         }
