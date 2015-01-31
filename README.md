@@ -1,13 +1,13 @@
 WADex
 =====
-Extracts and assembles WAD files from DOOM
+Extracts and assembles WAD files from DOOM and similar games.
 
 Command line
 ------------
 
     WADex.exe <operation> <WADfile> [Directory]
     
-    operation  - Either A,E, or I
+    operation  - Either A, E, I or C
                  A = Assemble (create) WAD from 'Directory'
                  E = Extract WAD to 'Directory'
                  I = Display Info about WAD file as CSV
@@ -119,7 +119,7 @@ All other lines are the entries in this format (the header is also present as fi
 
 **NAME** is the name in the WAD file
 
-**FILENAME** is the filename that would be used without considering existing files
+**FILENAME** is the filename that would be used (without considering existing files)
 
 **OFFSET** is the offset in bytes from the beginning of the WAD file of the data
 
@@ -129,7 +129,7 @@ All other lines are the entries in this format (the header is also present as fi
 
 **HASH** is the SHA1 hash for the data
 
-For virtual entries OFFSET and SIZE are both 0
+For virtual entries OFFSET and SIZE are both 0, also TYPE is set to "VIRTUAL"
 
 Conversion
 ----------
@@ -140,7 +140,7 @@ as they might already be in a usable format (for example an mp3 file)
 
 Known file types to convert:
 
-- Doom Sample -> Results in waf file
+- Doom Sample -> Results in wav file
 - Doom MUS -> Results in midi file
 - Doom Image -> Results in PNG image
 
@@ -149,5 +149,5 @@ Known file types to detect and extract:
 WAV, MP3, MID, IT, XM
 
 Messages
---------
+========
 messages showing the process are sent to stderr, regular output (especially for I command) is sent to stdout.
