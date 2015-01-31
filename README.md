@@ -118,10 +118,15 @@ All other lines are the entries in this format (the header is also present as fi
     <NAME>;<FILENAME>;<OFFSET>;<SIZE>;<TYPE>;<HASH>
 
 **NAME** is the name in the WAD file
+
 **FILENAME** is the filename that would be used without considering existing files
+
 **OFFSET** is the offset in bytes from the beginning of the WAD file of the data
+
 **SIZE** is the size in bytes of the data
+
 **TYPE** is the assumed file type from its header
+
 **HASH** is the SHA1 hash for the data
 
 For virtual entries OFFSET and SIZE are both 0
