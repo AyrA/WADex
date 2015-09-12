@@ -146,8 +146,9 @@ Known file types to convert:
 
 Known file types to detect and extract:
 
-WAV, MP3, MID, IT, XM
+WAV, MP3, OGG, MID, IT, XM
 
 Messages
 ========
-messages showing the process are sent to stderr, regular output (especially for I command) is sent to stdout.
+messages showing the process are sent to stderr,
+regular output (especially for I command) is sent to stdout.

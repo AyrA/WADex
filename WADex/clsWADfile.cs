@@ -39,6 +39,10 @@ namespace WADex
         /// </summary>
         MP3,
         /// <summary>
+        /// OGG Audio file
+        /// </summary>
+        OGG,
+        /// <summary>
         /// RAW audio format
         /// </summary>
         RAWAUDIO,
@@ -529,6 +533,10 @@ namespace WADex
                     Program.Log(ConsoleColor.Green, "Copying DATA -> {0}", FileType);
                     File.WriteAllBytes(To + "." + FileType.ToString(), From);
                     break;
+                case FType.OGG:
+                    Program.Log(ConsoleColor.Green, "Copying DATA -> {0}", FileType);
+                    File.WriteAllBytes(To + "." + FileType.ToString(), From);
+                    break;
                 case FType.MUS:
                     Program.Log(ConsoleColor.Yellow, "Converting MUS -> MID");
                     using (MemoryStream IN = new MemoryStream(From))
@@ -622,6 +630,10 @@ namespace WADex
             if (Cmp(Data, Encoding.UTF8.GetBytes("MUS")))
             {
                 return FType.MUS;
+            }
+            if (Cmp(Data, Encoding.UTF8.GetBytes("OggS")))
+            {
+                return FType.OGG;
             }
             if (Cmp(Data, new byte[] { 0x03, 0x00 }))
             {
