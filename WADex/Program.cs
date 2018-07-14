@@ -34,10 +34,10 @@ namespace WADex
                             return;
                         }
                         Console.WriteLine(WF.Type.ToString());
-                        Console.WriteLine("NAME;FILENAME;OFFSET;LENGTH;TYPE;HASH");
+                        Console.WriteLine("NAME\tFILENAME\tOFFSET\tLENGTH\tTYPE\tHASH");
                         foreach (WADentry e in WF.Entries)
                         {
-                            Console.WriteLine("{0};{1};{2};{3};{4};{5}", e.Name, e.SafeName, e.Offset, e.Length, e.DataType, e.Hash);
+                            Console.WriteLine("{0}\t{1}\t{2}\t{3}\t{4}\t{5}", e.Name, e.SafeName, e.Offset, e.Length, e.DataType, e.Hash);
                         }
                     }
                     else
@@ -64,7 +64,7 @@ namespace WADex
                             try
                             {
                                 WADfile.Assemble(args[1], args[2]);
-                                Console.WriteLine("Done");
+                                Console.Error.WriteLine("Done");
                             }
                             catch (Exception ex)
                             {
@@ -93,7 +93,7 @@ namespace WADex
                         if (Directory.Exists(args[2]))
                         {
                             WF.Export(args[2]);
-                            Console.WriteLine("Done");
+                            Console.Error.WriteLine("Done");
                         }
                         else
                         {
@@ -110,21 +110,21 @@ namespace WADex
             }
         }
 
-        private static void Convert(string From, string To)
+        private static void Convert(string FromFile, string ToFile)
         {
-            WADfile.Convert(File.ReadAllBytes(From), To);
+            WADfile.Convert(File.ReadAllBytes(FromFile), ToFile);
         }
 
-        private static void Convert(string From)
+        private static void Convert(string FromFile)
         {
-            int last = From.LastIndexOfAny(new char[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar });
-            int dot = From.LastIndexOf('.');
-            string To = From;
-            FType FileType = WADfile.GetType(File.ReadAllBytes(From));
+            int last = FromFile.LastIndexOfAny(new char[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar });
+            int dot = FromFile.LastIndexOf('.');
+            string To = FromFile;
+            FType FileType = WADfile.GetType(File.ReadAllBytes(FromFile));
             //check if file has extension, if so, cut off
             if (dot > last)
             {
-                To = From.Substring(0, dot);
+                To = FromFile.Substring(0, dot);
             }
             if (FileType == FType.MUS)
             {
@@ -140,20 +140,20 @@ namespace WADex
                 To += "." + FileType.ToString();
             }
             //very simple check, if the destination is the same as the source, ignoring character case
-            if (File.Exists(To) && WADfile.getHash(File.ReadAllBytes(From)) == WADfile.getHash(File.ReadAllBytes(To)))
+            if (File.Exists(To) && WADfile.getHash(File.ReadAllBytes(FromFile)) == WADfile.getHash(File.ReadAllBytes(To)))
             {
                 Log(ConsoleColor.Yellow, "File would be identical after generating destination name. Not converting");
             }
             else
             {
-                Convert(From, To);
+                Convert(FromFile, To);
             }
         }
 
-        private static string ToHex(byte[] Head)
+        private static string ToHex(byte[] Data)
         {
-            StringBuilder SB = new StringBuilder(Head.Length);
-            foreach (byte b in Head)
+            StringBuilder SB = new StringBuilder(Data.Length);
+            foreach (byte b in Data)
             {
                 if (b < ' ' || b > 126)
                 {
@@ -187,11 +187,11 @@ The directory needs to have a valid '!INDEX.TXT' file present.
 If the WAD file is present, it is overwritten
 
 The importer will do the folowing for you:
-- recalculating SHA hashes (the index file hashes are not modified)
-- importing all referenced files into the WAD in the order you have specified
+- Calculating SHA hashes. The index file hashes are ignored and not modified
+- Importing all referenced files into the WAD in the order you have specified
   them in the index file.
-- checking for identical data to save space.
-- update the references in the WAD file
+- Checking for identical data to save space.
+- Update the references in the WAD file
 ");
                     break;
                 case 'E':
@@ -273,7 +273,7 @@ MP3,WAV,IT,XM,MID
 
 To convert multiple entries, see the 'E' argument help.
 The 'E' operation will convert all data, if it finds a matching header.
-It is a great way to extract all music files from a WAD at once.");
+It is a great way to extract all sounds from a WAD at once.");
                     break;
                 case 'I':
                     Console.WriteLine(@"WAD extractor and assembler by AyrA
@@ -282,8 +282,8 @@ I operation
 -----------
 
 The I operation displays all items in the WAD dictionary
-This CSV format is used:
-<NAME>;<FILENAME>;<OFFSET>;<SIZE>;<TYPE>;<HASH>
+This Tab delimited format is used:
+<NAME>\t<FILENAME>\t<OFFSET>\t<SIZE>\t<TYPE>\t<HASH>
 
 NAME      - Name of the entry in the WAD file
 FILENAME  - Filename that would be used for extraction
