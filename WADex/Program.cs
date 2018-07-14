@@ -1,8 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Text;
 using System.IO;
-using musConvert;
 
 namespace WADex
 {
@@ -29,7 +27,7 @@ namespace WADex
                         {
                             WF = new WADfile(args[1]);
                         }
-                        catch(Exception ex)
+                        catch (Exception ex)
                         {
                             WF = null;
                             Log(ConsoleColor.Red, "Error: {0}", ex.Message);
@@ -114,7 +112,7 @@ namespace WADex
 
         private static void Convert(string From, string To)
         {
-            WADfile.Convert(File.ReadAllBytes(From),To);
+            WADfile.Convert(File.ReadAllBytes(From), To);
         }
 
         private static void Convert(string From)
