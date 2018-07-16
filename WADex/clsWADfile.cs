@@ -204,7 +204,7 @@ namespace WADex
                         {
                             if (File.Exists(Path.Combine(Folder, fName)))
                             {
-                                Program.Log(Verbosity.Warn, "finding alternate name for {0}...");
+                                Program.Log(Verbosity.Warn, "finding alternate name for {0}...", fName);
                                 int index = 0;
                                 while (File.Exists(Path.Combine(Folder, string.Format("{0}_{1}", fName, index))))
                                 {
