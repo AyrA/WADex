@@ -1,26 +1,56 @@
 ﻿using System;
+using System.Linq;
 using System.Text;
 using System.IO;
+using System.Collections.Generic;
 
 namespace WADex
 {
+    public enum Verbosity : int
+    {
+        Debug = ConsoleColor.Blue,
+        Log = ConsoleColor.Green,
+        Info = ConsoleColor.White,
+        Warn = ConsoleColor.Yellow,
+        Error = ConsoleColor.Red
+    }
     class Program
     {
+        private static readonly List<Verbosity> Verbosities;
+        private static Verbosity MinVerbosity = Verbosity.Info;
+
+        static Program()
+        {
+            Verbosities = new List<Verbosity>(new Verbosity[] {
+                Verbosity.Debug,
+                Verbosity.Log,
+                Verbosity.Info,
+                Verbosity.Warn,
+                Verbosity.Error
+            });
+        }
+
         /// <summary>
         /// Main entry point
         /// </summary>
         /// <param name="args">arguments</param>
         private static void Main(string[] args)
         {
+#if DEBUG
+            MinVerbosity = Verbosity.Debug;
+#endif
+            Log(Verbosity.Debug, "Arguments: {0}", string.Join("\t", args));
             WADfile WF;
             if (args.Length < 2)
             {
+                Log(Verbosity.Debug, "Interpret as Help Request");
                 Help(args.Length == 1 ? args[0].ToUpper()[0] : ' ');
             }
             else if (args.Length == 2)
             {
                 if (args[0].ToUpper() == "I")
                 {
+                    Log(Verbosity.Debug, "Mode I");
                     if (File.Exists(args[1]))
                     {
                         try
@@ -30,7 +60,7 @@ namespace WADex
                         catch (Exception ex)
                         {
                             WF = null;
-                            Log(ConsoleColor.Red, "Error: {0}", ex.Message);
+                            Log(Verbosity.Error, "Error parsing WAD file. Message: {0}", ex.Message);
                             return;
                         }
                         Console.WriteLine(WF.Type.ToString());
@@ -42,11 +72,12 @@ namespace WADex
                     }
                     else
                     {
-                        Log(ConsoleColor.Red, "File not found");
+                        Log(Verbosity.Error, "File not found");
                     }
                 }
                 else if (args[0].ToUpper() == "C")
                 {
+                    Log(Verbosity.Debug, "Mode C");
                     Convert(args[1]);
                 }
                 else
@@ -59,27 +90,29 @@ namespace WADex
                 switch (args[0].ToUpper())
                 {
                     case "A":
+                        Log(Verbosity.Debug, "Mode A");
                         if (Directory.Exists(args[2]))
                         {
                             try
                             {
                                 WADfile.Assemble(args[1], args[2]);
-                                Console.Error.WriteLine("Done");
+                                Log(Verbosity.Debug, "Done");
                             }
                             catch (Exception ex)
                             {
                                 WF = null;
-                                Log(ConsoleColor.Red, "Error: {0}", ex.Message);
+                                Log(Verbosity.Error, "Error: {0}", ex.Message);
                                 return;
                             }
 
                         }
                         else
                         {
-                            Log(ConsoleColor.Red, "Directory not found: {0}", args[2]);
+                            Log(Verbosity.Error, "Directory not found: {0}", args[2]);
                         }
                         break;
                     case "E":
+                        Log(Verbosity.Debug, "Mode E");
                         try
                         {
                             WF = new WADfile(args[1]);
@@ -87,27 +120,29 @@ namespace WADex
                         catch (Exception ex)
                         {
                             WF = null;
-                            Log(ConsoleColor.Red, "Error: {0}", ex.Message);
+                            Log(Verbosity.Error, "Error: {0}", ex.Message);
                             return;
                         }
                         if (Directory.Exists(args[2]))
                         {
                             WF.Export(args[2]);
-                            Console.Error.WriteLine("Done");
+                            Log(Verbosity.Debug, "Done");
                         }
                         else
                         {
-                            Log(ConsoleColor.Red, "Directory not found: {0}", args[2]);
+                            Log(Verbosity.Error, "Directory not found: {0}", args[2]);
                         }
                         break;
                     case "C":
+                        Log(Verbosity.Debug, "Mode C");
                         Convert(args[1], args[2]);
                         break;
                     default:
-                        Log(ConsoleColor.Red, "Invalid Operation: {0}", args[0]);
+                        Log(Verbosity.Error, "Invalid Operation: {0}", args[0]);
                         break;
                 }
             }
+            Log(Verbosity.Debug, "#END");
         }
 
         private static void Convert(string FromFile, string ToFile)
@@ -117,10 +152,11 @@ namespace WADex
 
         private static void Convert(string FromFile)
         {
+            Log(Verbosity.Debug, "Converting {0} to auto generated name", FromFile);
             int last = FromFile.LastIndexOfAny(new char[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar });
             int dot = FromFile.LastIndexOf('.');
             string To = FromFile;
-            FType FileType = WADfile.GetType(File.ReadAllBytes(FromFile));
+            FType FileType = WADfile.GetDataType(File.ReadAllBytes(FromFile));
             //check if file has extension, if so, cut off
             if (dot > last)
             {
@@ -142,10 +178,11 @@ namespace WADex
             //very simple check, if the destination is the same as the source, ignoring character case
             if (File.Exists(To) && WADfile.getHash(File.ReadAllBytes(FromFile)) == WADfile.getHash(File.ReadAllBytes(To)))
             {
-                Log(ConsoleColor.Yellow, "File would be identical after generating destination name. Not converting");
+                Log(Verbosity.Warn, "File would be identical after generating destination name. Not converting");
             }
             else
             {
+                Log(Verbosity.Debug, "Auto-Generated File Name: {0}", To);
                 Convert(FromFile, To);
             }
         }
@@ -173,6 +210,7 @@ namespace WADex
         /// <param name="Operation">operation to show the help.</param>
         private static void Help(char Operation)
         {
+            Log(Verbosity.Debug, "Help Request Option: '{0}'", Operation);
             switch (Operation)
             {
                 case 'A':
@@ -319,12 +357,19 @@ Specify only the operation parameter to get specific help");
         /// <param name="C">Color</param>
         /// <param name="Message">Message</param>
         /// <param name="args">Argument (for string.Format)</param>
-        public static void Log(ConsoleColor C, string Message, params object[] args)
+        public static void Log(Verbosity V, string Message, params object[] args)
         {
-            ConsoleColor CC = Console.ForegroundColor;
-            Console.ForegroundColor = C;
-            Console.Error.WriteLine(Message, args);
-            Console.ForegroundColor = CC;
+            if (!Enum.IsDefined(V.GetType(), V))
+            {
+                throw new ArgumentException(string.Format("Unsupported Log Verbosity: {0}", V));
+            }
+            if (Verbosities.IndexOf(V) >= Verbosities.IndexOf(MinVerbosity))
+            {
+                ConsoleColor CC = Console.ForegroundColor;
+                Console.ForegroundColor = (ConsoleColor)V;
+                Console.Error.WriteLine(Message, args);
+                Console.ForegroundColor = CC;
+            }
         }
     }
 }

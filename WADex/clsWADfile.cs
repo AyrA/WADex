@@ -5,6 +5,7 @@ using System.Drawing;
 using System.Collections.Generic;
 using System.Security.Cryptography;
 using musConvert;
+using System.Linq;
 
 namespace WADex
 {
@@ -74,7 +75,7 @@ namespace WADex
     /// Represents a .WAD file
     /// </summary>
 	public class WADfile
-	{
+    {
         /// <summary>
         /// represents a line in !INDEX.TXT
         /// </summary>
@@ -126,6 +127,7 @@ namespace WADex
         /// <param name="fName">File name</param>
         public WADfile(string fName)
         {
+            Program.Log(Verbosity.Debug, "Loading {0} into Memory", fName);
             using (FileStream FS = File.OpenRead(fName))
             {
                 using (BinaryReader BR = new BinaryReader(FS))
@@ -141,10 +143,11 @@ namespace WADex
                     }
                     else
                     {
-                        throw new Exception("Not a WAD file. Wrong Header");
+                        throw new NotSupportedException("Unsupported file. Unknown Header");
                     }
                     int NumEntries = BR.ReadInt32();
                     int Directory = BR.ReadInt32();
+                    Program.Log(Verbosity.Debug, "Number of Entries: {0}, Directory start: {1}", NumEntries, Directory);
                     FS.Seek(Directory, SeekOrigin.Begin);
                     Entries = new WADentry[NumEntries];
                     for (int i = 0; i < NumEntries; i++)
@@ -154,8 +157,10 @@ namespace WADex
                         string Name = ToString(BR.ReadBytes(8));
                         if (Len > 0 && Pos > 0)
                         {
+                            Program.Log(Verbosity.Debug, "{0} is {1} bytes", Name, Len);
                             byte[] Data = new byte[Len];
                             int currentOffset = (int)FS.Position;
+                            //Read Data and seek back
                             FS.Seek(Pos, SeekOrigin.Begin);
                             FS.Read(Data, 0, Len);
                             FS.Seek(currentOffset, SeekOrigin.Begin);
@@ -163,11 +168,13 @@ namespace WADex
                         }
                         else
                         {
+                            Program.Log(Verbosity.Debug, "{0} is Virtual", Name);
                             Entries[i] = new WADentry(Name, 0, null);
                         }
                     }
                 }
             }
+            Program.Log(Verbosity.Info, "WAD file has {0} entries ({1} virtual)", Entries.Length, Entries.Count(m => m.Virtual));
         }
 
         /// <summary>
@@ -176,17 +183,20 @@ namespace WADex
         /// <param name="Directory">(preferable empty) Directory</param>
         public void Export(string Folder)
         {
+            Program.Log(Verbosity.Debug, "Exporting to {0}", Folder);
             string MediaDir = Path.Combine(Folder, "MEDIA");
             if (!Directory.Exists(MediaDir))
             {
+                Program.Log(Verbosity.Debug, "Creating directory");
                 Directory.CreateDirectory(MediaDir);
             }
             Dictionary<string, string> Hashes = new Dictionary<string, string>();
-            using (StreamWriter SW = File.CreateText(Path.Combine(Folder,"!INDEX.TXT")))
+            using (StreamWriter SW = File.CreateText(Path.Combine(Folder, "!INDEX.TXT")))
             {
                 SW.WriteLine("{0}", Type);
                 foreach (WADentry e in Entries)
                 {
+                    Program.Log(Verbosity.Debug, "Processing {0}", e.Name);
                     if (!e.Virtual)
                     {
                         string fName = e.SafeName;
@@ -194,7 +204,7 @@ namespace WADex
                         {
                             if (File.Exists(Path.Combine(Folder, fName)))
                             {
-                                Program.Log(ConsoleColor.Yellow, "finding alternate name...");
+                                Program.Log(Verbosity.Warn, "finding alternate name for {0}...");
                                 int index = 0;
                                 while (File.Exists(Path.Combine(Folder, string.Format("{0}_{1}", fName, index))))
                                 {
@@ -202,7 +212,7 @@ namespace WADex
                                 }
                                 fName = string.Format("{0}_{1}", fName, index);
                             }
-                            Program.Log(ConsoleColor.Green, "Creating {0}... Type: {1}", fName, e.DataType);
+                            Program.Log(Verbosity.Debug, "Creating {0}... Type: {1}", fName, e.DataType);
                             File.WriteAllBytes(Path.Combine(Folder, fName), e.Data);
                             Hashes.Add(e.Hash, fName);
                             if (e.DataType != FType.UNKNOWN)
@@ -212,17 +222,18 @@ namespace WADex
                         }
                         else
                         {
-                            Program.Log(ConsoleColor.Yellow, "{0} duplicates {1}; creating reference only", e.Name, Hashes[e.Hash]);
+                            Program.Log(Verbosity.Warn, "{0} duplicates {1}; creating reference only", e.Name, Hashes[e.Hash]);
                         }
                         SW.WriteLine("{0,8}\t{1,12}\t{2}", e.Name, Hashes[e.Hash], e.Hash);
                     }
                     else
                     {
-                        Program.Log(ConsoleColor.Green, "Create virtual entry {0}...", e.Name);
+                        Program.Log(Verbosity.Debug, "Create virtual entry {0}...", e.Name);
                         SW.WriteLine("{0,8}", e.Name, string.Empty);
                     }
                 }
             }
+            Program.Log(Verbosity.Debug, "Exporting to {0} complete", Folder);
         }
 
         /// <summary>
@@ -232,13 +243,16 @@ namespace WADex
         /// <param name="SourceDirectory">Source directory with !INDEX.TXT</param>
         public static void Assemble(string FileName, string SourceDirectory)
         {
+            Program.Log(Verbosity.Debug, "Assembling {0} from {1}", FileName, SourceDirectory);
             //to map hashes to offsets
             Dictionary<string, int> Hashes = new Dictionary<string, int>();
             string[] Settings = File.ReadAllLines(Path.Combine(SourceDirectory, "!INDEX.TXT"));
             int entries = 0;
+            int deduplication = 0;
 
             if (File.Exists(FileName))
             {
+                Program.Log(Verbosity.Warn, "Overwriting existing file: {0}", FileName);
                 File.Delete(FileName);
             }
 
@@ -249,15 +263,13 @@ namespace WADex
                     switch (Settings[0].ToUpper())
                     {
                         case "IWAD":
-                            FS.Write(Encoding.ASCII.GetBytes("IWAD"), 0, 4);
-                            break;
                         case "PWAD":
-                            FS.Write(Encoding.ASCII.GetBytes("PWAD"), 0, 4);
+                            FS.Write(Encoding.ASCII.GetBytes(Settings[0].ToUpper()), 0, 4);
                             break;
                         default:
                             throw new ArgumentException("'SourceDirectory' does not contains valid !INDEX.TXT file");
                     }
-                    //write two indexes, as we need them later
+                    //Reserve space for two indexes, we need them later
                     BW.Write(0);
                     BW.Write(0);
                     BW.Flush();
@@ -272,7 +284,7 @@ namespace WADex
                             {
                                 //get next config line
                                 Line L = ParseLine(Settings[i]);
-                                //check if valid
+                                //Skip over invalid lines
                                 if (L.IsValid())
                                 {
                                     byte[] Data = new byte[0];
@@ -280,7 +292,7 @@ namespace WADex
                                     //only read file if entry is not virtual
                                     if (!L.Virtual)
                                     {
-                                        Program.Log(ConsoleColor.Green, "Adding entry {0} to WAD...", L.Name);
+                                        Program.Log(Verbosity.Log, "Adding entry {0} to WAD...", L.Name);
                                         Data = File.ReadAllBytes(Path.Combine(SourceDirectory, L.FileName));
                                         //create hash to check if this entry is already present
                                         string Hash = getHash(Data);
@@ -298,18 +310,19 @@ namespace WADex
                                         else
                                         {
                                             //in list, same data exists and we only reference it to save storage
-                                            Program.Log(ConsoleColor.Yellow, "Duplicate {0} will only be referenced to offset {1}", L.Name, Hashes[Hash]);
+                                            Program.Log(Verbosity.Info, "Duplicate {0} will be referenced to offset {1}", L.Name, Hashes[Hash]);
                                             L.Offset = Hashes[Hash];
+                                            deduplication += Data.Length;
                                         }
                                     }
                                     else
                                     {
-                                        Program.Log(ConsoleColor.Green, "Not reading entry {0} from file as it is virtual", L.Name);
+                                        Program.Log(Verbosity.Log, "Not reading entry {0} from file as it is virtual", L.Name);
                                         //offset for virtual entries is 0
                                         L.Offset = 0;
                                     }
-                                    //write WAD dictionary
-                                    //always done, even if virtual
+                                    //Write WAD dictionary
+                                    //Always done, even if virtual
                                     DictW.Write(L.Offset);
                                     DictW.Write(Data.Length);
                                     Dict.Write(ToBytes(L.Name), 0, 8);
@@ -317,10 +330,10 @@ namespace WADex
                                 }
                                 else
                                 {
-                                    Program.Log(ConsoleColor.Red, "Invalid Line entry: {0}", Settings[i]);
+                                    Program.Log(Verbosity.Warn, "Skipping invalid Line entry: {0}", Settings[i]);
                                 }
                             }
-                            //write WAD indexes
+                            //Write WAD indexes we reserved space for in the beginning
                             DictW.Flush();
                             BW.Flush();
                             int pos = (int)FS.Position;
@@ -331,6 +344,8 @@ namespace WADex
                             FS.Seek(0, SeekOrigin.End);
                             //write Dictionary to WAD file
                             BW.Write(Dict.ToArray());
+
+                            Program.Log(Verbosity.Info, "Deduplication saved {0} bytes", deduplication);
                         }
                     }
                 }
@@ -366,20 +381,15 @@ namespace WADex
         /// <returns>byte array</returns>
         public static byte[] ToBytes(string s)
         {
-            byte[] b = Encoding.ASCII.GetBytes(s);
-            if (b.Length < 8)
-            {
-                Array.Resize<byte>(ref b, 8);
-            }
-            return b;
+            return Encoding.ASCII.GetBytes(s.Length < 8 ? s.PadRight(8, '\0') : s.Substring(0, 8));
         }
 
         /// <summary>
         /// Swaps endiannes of a given number
-        /// Not used on windows
         /// </summary>
         /// <param name="Number">Number</param>
         /// <returns>reversed number</returns>
+        /// <remarks>Not used on windows</remarks>
         public static int SwapEndiannes(int Number)
         {
             byte[] temp = BitConverter.GetBytes(Number);
@@ -389,10 +399,10 @@ namespace WADex
 
         /// <summary>
         /// Swaps endiannes of a given number
-        /// Not used on windows
         /// </summary>
         /// <param name="Number">Number</param>
         /// <returns>reversed number</returns>
+        /// <remarks>Not used on windows</remarks>
         public static short SwapEndiannes(short Number)
         {
             byte[] temp = BitConverter.GetBytes(Number);
@@ -410,6 +420,7 @@ namespace WADex
         {
             int w, h, i, j;
             int[] pointers;
+            Program.Log(Verbosity.Debug, "Converting DOOM imaghe to PNG at {0}", Destination);
             using (MemoryStream MS = new MemoryStream(Data))
             {
                 using (BinaryReader BR = new BinaryReader(MS))
@@ -428,12 +439,12 @@ namespace WADex
 
                     BR.ReadInt16();
 
-                    Bitmap B = new Bitmap(w,h);
+                    Bitmap B = new Bitmap(w, h);
 
                     Graphics G = Graphics.FromImage(B);
                     G.FillRectangle(Brushes.Transparent, new Rectangle(new Point(0, 0), B.Size));
 
-                    for (j = 0; j < pointers.Length;j++ )
+                    for (j = 0; j < pointers.Length; j++)
                     {
                         MS.Seek(pointers[j], SeekOrigin.Begin);
                         byte row = BR.ReadByte();
@@ -452,7 +463,7 @@ namespace WADex
                             byte[] Pixels = BR.ReadBytes(numPixels + 2);
                             for (i = 1; i < Pixels.Length - 1; i++)
                             {
-                                B.SetPixel(j, row + i - 1, Color.FromArgb(Pixels[i],Pixels[i],Pixels[i]));
+                                B.SetPixel(j, row + i - 1, Color.FromArgb(Pixels[i], Pixels[i], Pixels[i]));
                             }
                         }
                     }
@@ -496,16 +507,10 @@ namespace WADex
         /// <returns>SHA1 hash</returns>
         public static string getHash(byte[] Data)
         {
-            SHA1 HA = SHA1.Create();
-            byte[] Hash = HA.ComputeHash(Data);
-            HA.Clear();
-            HA = null;
-            StringBuilder retValue = new StringBuilder(Hash.Length * 2);
-            foreach (byte b in Hash)
+            using (var HA = SHA1.Create())
             {
-                retValue.Append(b.ToString("X2"));
+                return string.Concat(HA.ComputeHash(Data).Select(m => m.ToString("X2")));
             }
-            return retValue.ToString();
         }
 
         /// <summary>
@@ -516,9 +521,10 @@ namespace WADex
         /// <returns>true, if successful</returns>
         public static bool Convert(byte[] From, string To)
         {
-            FType FileType = WADfile.GetType(From);
+            FType FileType = GetDataType(From);
             if (File.Exists(To))
             {
+                Program.Log(Verbosity.Debug, "Deleting existing file {0}", To);
                 File.Delete(To);
             }
             switch (FileType)
@@ -529,18 +535,15 @@ namespace WADex
                 case FType.MID:
                 case FType.WAV:
                 case FType.MP3:
-                    Program.Log(ConsoleColor.Green, "Copying DATA -> {0}", FileType);
-                    File.WriteAllBytes(To + "." + FileType.ToString(), From);
-                    break;
                 case FType.OGG:
-                    Program.Log(ConsoleColor.Green, "Copying DATA -> {0}", FileType);
+                    Program.Log(Verbosity.Debug, "Copying DATA -> {0}", FileType);
                     File.WriteAllBytes(To + "." + FileType.ToString(), From);
                     break;
                 case FType.MUS:
-                    Program.Log(ConsoleColor.Yellow, "Converting MUS -> MID");
+                    Program.Log(Verbosity.Debug, "Converting MUS -> MID");
                     using (MemoryStream IN = new MemoryStream(From))
                     {
-                        using (FileStream OUT = File.Create(To+".MID"))
+                        using (FileStream OUT = File.Create(To + ".MID"))
                         {
                             MUS2MID.Convert(IN, OUT);
                         }
@@ -550,7 +553,7 @@ namespace WADex
                     SaveAudio(From, To + ".WAV");
                     break;
                 case FType.VIRTUAL:
-                    Program.Log(ConsoleColor.Yellow, "Not converting virtual entry");
+                    Program.Log(Verbosity.Debug, "Not converting virtual entry");
                     return false;
                 default:
                     try
@@ -559,6 +562,7 @@ namespace WADex
                     }
                     catch
                     {
+                        Program.Log(Verbosity.Log, "Unable to find suitable format for DATA. Skipping Convert()");
                         return false;
                     }
                     break;
@@ -574,6 +578,7 @@ namespace WADex
         /// <returns>true, if successful</returns>
         private static bool SaveAudio(byte[] From, string To)
         {
+            Program.Log(Verbosity.Debug, "Exporting Audio to {0}", To);
             ushort Header, Samplerate, NumSamples, Zero;
             if (From.Length > 8)
             {
@@ -586,7 +591,7 @@ namespace WADex
                 {
                     using (FileStream FS = File.OpenWrite(To))
                     {
-                        FS.Write(wavCap.Header.WaveHeader(NumSamples), 0, 44);
+                        FS.Write(wavCap.Header.WaveHeader(NumSamples, (int)wavCap.Header.CommonQuality.TelephoneQuality, 1, 8), 0, 44);
                         FS.Write(From, 0, From.Length);
                     }
                     return true;
@@ -600,7 +605,7 @@ namespace WADex
         /// </summary>
         /// <param name="Data">Data to check</param>
         /// <returns>data type</returns>
-        public static FType GetType(byte[] Data)
+        public static FType GetDataType(byte[] Data)
         {
             if (Data == null || Data.Length == 0)
             {

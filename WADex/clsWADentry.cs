@@ -71,7 +71,7 @@
         {
             get
             {
-                return WADfile.GetType(Data);
+                return WADfile.GetDataType(Data);
             }
         }
 

@@ -13,7 +13,7 @@ namespace wavCap
             StudioQuality = 48000,
             CDQuality = 44100,
             LowQuality = 22050,
-            TelephoneQUality = 11250
+            TelephoneQuality = 11250
         }
 
         /// <summary>
