@@ -38,6 +38,11 @@ namespace WADex
         {
 #if DEBUG
             MinVerbosity = Verbosity.Debug;
+            args = new string[] {
+                "E",
+                @"C:\Users\Administrator\Desktop\Games\GZdoom\HellOnEarthStarterPack\hellonearthstarterpack.wad",
+                @"C:\Users\Administrator\Desktop\Games\GZdoom\HellOnEarthStarterPack\HellOnEarth"
+            };
 #endif
             Log(Verbosity.Debug, "Arguments: {0}", string.Join("\t", args));
             WADfile WF;
@@ -123,15 +128,13 @@ namespace WADex
                             Log(Verbosity.Error, "Error: {0}", ex.Message);
                             return;
                         }
-                        if (Directory.Exists(args[2]))
+                        if (!Directory.Exists(args[2]))
                         {
-                            WF.Export(args[2]);
-                            Log(Verbosity.Debug, "Done");
+                            Log(Verbosity.Log, "Creating Directory: {0}", args[2]);
+                            Directory.CreateDirectory(args[2]);
                         }
-                        else
-                        {
-                            Log(Verbosity.Error, "Directory not found: {0}", args[2]);
-                        }
+                        WF.Export(args[2]);
+                        Log(Verbosity.Debug, "Done");
                         break;
                     case "C":
                         Log(Verbosity.Debug, "Mode C");
@@ -143,6 +146,9 @@ namespace WADex
                 }
             }
             Log(Verbosity.Debug, "#END");
+#if DEBUG
+            Console.ReadKey(true);
+#endif
         }
 
         private static void Convert(string FromFile, string ToFile)
@@ -367,7 +373,18 @@ Specify only the operation parameter to get specific help");
             {
                 ConsoleColor CC = Console.ForegroundColor;
                 Console.ForegroundColor = (ConsoleColor)V;
-                Console.Error.WriteLine(Message, args);
+                try
+                {
+                    Console.Error.WriteLine(Message, args);
+                }
+                catch
+                {
+                    Log(Verbosity.Error, "Unable to log message properly: {0}", Message);
+                }
+                if (V == Verbosity.Error)
+                {
+                    Console.Error.WriteLine(string.Join("\n", Environment.StackTrace.Split('\n').Skip(3)));
+                }
                 Console.ForegroundColor = CC;
             }
         }
